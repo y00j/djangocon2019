@@ -46,9 +46,85 @@ if you want to see the actual query - you can use .query whcih will print the SQ
 
 ##F objects
 
-according to american red cross, one can donate blood every 56 days.
+- Used to reference fields
+- Avoids loading database objects into memory
+- Allows you to do basic arithmatic operations on query expressions
+- Can be used with annotations (annotate())
+
+Ex:
+```
+BloodBank.objecs.annotate(
+    existent_amount=Count("bloodbag_set"),
+    remaining=F("goal") - F("existent_amount"),
+).values_list("goal", "existent_amount", "remaining")
+```
+
+What about expressions with different field types?
+Ex:
+```
+Event.objects.annotate(
+    ends_on=F("starts_at") + F("duration")
+)
+```
+^^ if `starts_at` is a timefield and `duration` is a datetimefield, it will throw a `FieldError`
+
+Solution is wrap in ExpressionWrapper
+
+```
+Event.objects.annotate(
+    ends_on=ExpressionWrapper(
+        F("starts_at") + F("duration"),
+        output_field=DateTimeField()
+    )
+)
+```
+
+can mix F and Q objects together
 
 
+##Database functions
+Ued with annotations are very performant
+
+What if we want to query a model's property? 
+
+```
+Person.objects.annotate(
+    full_name=Concat("first_name", Value(" "), "last_name")
+).filter(full_name__icontains="john").values_list("full_name")
+```
+
+Can improve performance further by adding queryset to models:
+
+```
+class PersonQuerySet(mdoels.QuerySet):
+    def annotate_full_name(self):
+        return self.annotate(
+            full_name=Concat("first_name", Value(" "), "last_name")
+        )
+
+class Person(models.Model):
+    objects=PersonQuerySet.as_manager()
+
+# now you can do
+
+Person.objects.annotate_full_name().values_list("full_name")
+```
+
+### Coalesce
+- database method that returns the first non-null value across multiple fields
+```
+Person.objects.annotate(
+    goes_by=Coalesce("nickname", "first_name")
+)
+```
+
+## Conditional Expressions
+
+Case, When
+
+django-debug-toolbar
+
+QuerySet.explain()
 
 Person.objects.filter(list_of_Q_objects)
   - Q objects can be nexted
